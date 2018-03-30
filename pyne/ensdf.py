@@ -69,7 +69,7 @@ def _to_id(nuc):
     return nucid
 
 
-# Energy to half-life conversion:  T1/2= ln(2) × (h/2 pi) / energy
+# Energy to half-life conversion:  T1/2= ln(2) x (h/2 pi) / energy
 # See http://www.nndc.bnl.gov/nudat2/help/glossary.jsp#halflife
 # NIST CODATA https://physics.nist.gov/cgi-bin/cuu/Value?hbar
 #    h-bar = 1.054 571 800(13) x 1e-34 J
@@ -223,6 +223,7 @@ def _parse_level_record(l_rec):
     else:
         e, de = _get_val_err(l_rec.group(2).strip('() '), l_rec.group(3))
     tfinal, tfinalerr = _to_time(l_rec.group(5), l_rec.group(6))
+    j = l_rec.group(4).strip();
     from_nuc = _to_id(l_rec.group(1))
     m = l_rec.group(11)
     s = l_rec.group(12)
@@ -233,7 +234,7 @@ def _parse_level_record(l_rec):
             state = int(state)
         else:
             state = 1
-    return e, tfinal, from_nuc, state, special
+    return e, de, j, tfinal, tfinalerr, from_nuc, state, special
 
 
 def _parse_level_continuation_record(lc_rec):
@@ -684,14 +685,17 @@ def _parse_decay_dataset(lines, decay_s):
     nb = None
     br = None
     level = None
+    levelerr = None
+    state = None
+    levelJ = None
     special = " "
     goodgray = False
     parent2 = None
     for line in lines:
         level_l = _level_regex.match(line)
         if level_l is not None:
-            level, half_lifev, from_nuc, \
-            state, special = _parse_level_record(level_l)
+            level, levelerr, levelJ, half_lifev, half_lifeverr, \
+            from_nuc, state, special = _parse_level_record(level_l)
             continue
         b_rec = _beta.match(line)
         if b_rec is not None:
@@ -702,13 +706,16 @@ def _parse_decay_dataset(lines, decay_s):
                 bparent = parent2
             level = 0.0 if level is None else level
             bdaughter = data.id_from_level(_to_id(daughter), level)
-            betas.append([bparent, bdaughter, dat[0], 0.0, dat[2]])
+            brecord = [bparent, bdaughter]
+            brecord.extend(dat)
+            brecord.extend([0.0, 0.0])
+            betas.append(brecord)
         bc_rec = _betac.match(line)
         if bc_rec is not None:
             bcdat = _parse_beta_continuation_record(bc_rec)
             if bcdat[0] is not None:
                 if bc_rec.group(2) == 'B':
-                    betas[-1][3] = bcdat[0]
+                    betas[-1][-2:] = bcdat
                 else:
                     ecbp[-1][3] = bcdat[0]
                     bggc = _gc.match(line)
@@ -852,7 +859,7 @@ def _adjust_ge100_branches(levellist):
     brsum = defaultdict(float)
     bridx = defaultdict(lambda: (-1, -1.0))
     baddies = []
-    for i, (nuc, rx, hl, lvl, br, ms, sp) in enumerate(levellist):
+    for i, (nuc, rx, j, hl, hle, lvl, lvle, br, ms, sp) in enumerate(levellist):
         if rx == 0:
             continue
         if br >= bridx[nuc][1]:
@@ -866,7 +873,7 @@ def _adjust_ge100_branches(levellist):
         row = levellist[i]
         # this line ensures that all branches sum to 100.0 within floating point
         new_br = 100.0 - brsum[nuc] + br
-        new_row = row[:4] + (new_br,) + row[5:]
+        new_row = row[:7] + (new_br,) + row[8:]
         levellist[i] = new_row
     # remove bad reaction rows
     for i in baddies[::-1]:
@@ -895,13 +902,13 @@ _BAD_METASTABLES = {
 def _adjust_metastables(levellist):
     """Adjusts misreported metastable states in place."""
     for i in range(len(levellist)):
-        key = (levellist[i][0], levellist[i][5])
+        key = (levellist[i][0], levellist[i][8])
         if key in _BAD_METASTABLES:
             row = list(levellist[i])
             new_id = _BAD_METASTABLES[key]
             if not isinstance(new_id, int):
                 row[0], new_id = new_id
-            row[5] = new_id
+            row[8] = new_id
             levellist[i] = tuple(row)
 
 
@@ -920,7 +927,7 @@ def _adjust_half_lives(levellist):
         key = levellist[i][:2]
         if key in _BAD_HALF_LIVES:
             row = list(levellist[i])
-            row[2] = _BAD_HALF_LIVES[key]
+            row[3] = _BAD_HALF_LIVES[key]
             levellist[i] = tuple(row)
 
 
@@ -996,15 +1003,15 @@ def levels(filename, levellist=None):
                             if goodkey is True:
                                 rx = rxname.id(keystrip)
                                 branch_percent = float(val.split("(")[0])
-                                levellist.append((nuc_id, rx, half_lifev,
-                                                  level, branch_percent,
-                                                  state, special))
+                                levellist.append((nuc_id, rx, levelJ, half_lifev,
+                                                  half_lifeverr, level, levelerr,
+                                                  branch_percent, state, special))
                     if level_found is True:
-                        levellist.append((nuc_id, 0, half_lifev, level, 0.0,
-                                          state, special))
+                        levellist.append((nuc_id, 0, levelJ, half_lifev, half_lifeverr,
+                                          level, levelerr, 0.0, state, special))
                     brs = {}
-                    level, half_lifev, from_nuc, state, special = \
-                        _parse_level_record(level_l)
+                    level, levelerr, levelJ, half_lifev, half_lifeverr, \
+                    from_nuc, state, special = _parse_level_record(level_l)
                     if from_nuc is not None:
                         nuc_id = from_nuc + leveln
                         leveln += 1
@@ -1026,15 +1033,41 @@ def levels(filename, levellist=None):
                     if goodkey is True:
                         rx = rxname.id(keystrip)
                         branch_percent = float(val.split("(")[0])
-                        levellist.append((nuc_id, rx, half_lifev, level,
+                        levellist.append((nuc_id, rx, levelJ, half_lifev, 
+                                          half_lifeverr, level, levelerr,
                                           branch_percent, state, special))
             if level_found is True:
-                levellist.append((nuc_id, 0, half_lifev, level, 0.0, state,
-                                  special))
+                levellist.append((nuc_id, 0, levelJ, half_lifev, half_lifeverr, 
+                                  level, levelerr, 0.0, state, special))
     _adjust_ge100_branches(levellist)
     _adjust_metastables(levellist)
     _adjust_half_lives(levellist)
     return levellist
+
+def qvalues(filename, qvaluelist=None):
+    if qvaluelist is None:
+        qvaluelist = []
+    if isinstance(filename, str):
+        with open(filename, 'r') as f:
+            dat = f.read()
+    else:
+        dat = filename.read()
+    datasets = dat.split(80 * " " + "\n")
+    for dataset in datasets:
+        lines = dataset.splitlines()
+        if len(lines) == 0:
+            continue
+        ident = re.match(_ident, lines[0])
+        if ident is None:
+            continue
+        if 'ADOPTED LEVELS' in ident.group(2):
+            for line in lines:
+                q_rec = _q.match(line)
+                if q_rec is not None:
+                    qminus, dqminus, sn, dsn, sp, dsp, qa, dqa = _parse_qvalue_record(q_rec)
+                    from_nuc = _to_id(q_rec.group(1))
+                    qvaluelist.append([from_nuc, qminus, dqminus])
+    return qvaluelist
 
 
 def decays(filename, decaylist=None):
