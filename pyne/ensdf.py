@@ -517,6 +517,14 @@ def _parse_parent_record(p_rec):
         half-life in seconds
     tfinalerr : float
         Uncertainty in half-life in seconds
+    e : float
+        energy in keV
+    de : float
+        uncertainty energy level in keV
+    qp : float
+        Q value in keV
+    dqp : float
+        uncertainty in qp in keV
     """
     lm = re.match("[ ]*([A-Z]+)(?![A-Z0-9+])", p_rec.group(2))
     spv = _specialval.match(p_rec.group(2).strip())
@@ -540,7 +548,8 @@ def _parse_parent_record(p_rec):
         e, de = _get_val_err(p_rec.group(2).strip('() '), p_rec.group(3))
     j = p_rec.group(4)
     tfinal, tfinalerr = _to_time(p_rec.group(5), p_rec.group(6))
-    return p_rec.group(1), tfinal, tfinalerr, e, de, special
+    qp, dqp = _get_val_err(p_rec.group(7), p_rec.group(8))
+    return p_rec.group(1), tfinal, tfinalerr, e, de, qp, dqp, special
 
 
 def _parse_qvalue_record(q_rec):
@@ -676,6 +685,8 @@ def _parse_decay_dataset(lines, decay_s):
         pfinal = _to_id(parents[0][:5])
     tfinal = None
     tfinalerr = None
+    qp = None
+    dqp = None
     nrbr = None
     nbbr = None
     nrbr_err = None
@@ -816,7 +827,7 @@ def _parse_decay_dataset(lines, decay_s):
                 pfinal = [parent2,]
                 tfinal = [t,]
                 tfinalerr = [terr,]
-            parent2, t, terr, e, e_err, special = _parse_parent_record(p_rec)
+            parent2, t, terr, e, e_err, qp, dqp, special = _parse_parent_record(p_rec)
             parent2 = data.id_from_level(_to_id(parent2), e, special)
             if terr is not None and not isinstance(terr, float):
                 terr = (terr[0] + terr[1])/2.0
@@ -835,7 +846,7 @@ def _parse_decay_dataset(lines, decay_s):
             for item in parents:
                 pfinal.append(_to_id(item))
         return pfinal, daughter_id, rxname.id(decay_s.strip().lower()), \
-               tfinal, tfinalerr, \
+               tfinal, tfinalerr, qp, dqp, \
                br, br_err, nrbr, nrbr_err, nbbr, nbbr_err, gammarays, alphas, \
                betas, ecbp
     return None
@@ -1184,26 +1195,26 @@ def decays(filename, decaylist=None):
                             dc[0] = parent
                             dc[3] = decay[3][i]
                             dc[4] = decay[4][i]
-                            for gamma in dc[11]:
+                            for gamma in dc[13]:
                                 gamma[2] = parent
-                            for alpha in dc[12]:
+                            for alpha in dc[14]:
                                 alpha[0] = parent
-                            for beta in dc[13]:
+                            for beta in dc[15]:
                                 beta[0] = parent
-                            for ecbp in dc[14]:
+                            for ecbp in dc[16]:
                                 ecbp[0] = parent
                             decaylist.append(tuple(dc))
                     else:
                         for parent in decay[0]:
                             dc = copy.deepcopy(list(decay))
                             dc[0] = parent
-                            for gamma in dc[11]:
+                            for gamma in dc[13]:
                                 gamma[2] = parent
-                            for alpha in dc[12]:
+                            for alpha in dc[14]:
                                 alpha[0] = parent
-                            for beta in dc[13]:
+                            for beta in dc[15]:
                                 beta[0] = parent
-                            for ecbp in dc[14]:
+                            for ecbp in dc[16]:
                                 ecbp[0] = parent
                             decaylist.append(tuple(dc))
                 else:
