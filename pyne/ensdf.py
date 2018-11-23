@@ -14,7 +14,7 @@ from pyne import nucname, rxname, data
 if sys.version_info[0] > 2:
     basestring = str
 
-warn(__name__ + " is not yet QA compliant.", QAWarning)
+warn(__name__ + " is not yet QA compliant. BOOHOO", QAWarning)
 
 _valexp = re.compile('([0-9.]*)([Ee][+-]?\d*)')
 _val = re.compile('(\d*)[.](\d*)')
@@ -757,8 +757,8 @@ def _parse_decay_dataset(lines, decay_s):
                 ecparent = parent2
             level = 0.0 if level is None else level
             ecdaughter = data.id_from_level(_to_id(daughter), level)
-            ecbp.append([ecparent, ecdaughter, dat[0], 0.0, dat[2], dat[4],
-                         0, 0, 0])
+            ecbp.append([ecparent, ecdaughter, dat[0], 0., dat[2], dat[4], dat[6],
+                         0., 0., 0.])
             continue
         g_rec = _g.match(line)
         if g_rec is not None:
@@ -1202,6 +1202,7 @@ def decays(filename, decaylist=None):
                             for beta in dc[15]:
                                 beta[0] = parent
                             for ecbp in dc[16]:
+                                print(ecbp[6])
                                 ecbp[0] = parent
                             decaylist.append(tuple(dc))
                     else:
@@ -1215,6 +1216,7 @@ def decays(filename, decaylist=None):
                             for beta in dc[15]:
                                 beta[0] = parent
                             for ecbp in dc[16]:
+                                print(ecbp[6])
                                 ecbp[0] = parent
                             decaylist.append(tuple(dc))
                 else:
